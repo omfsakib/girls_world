@@ -103,11 +103,32 @@ def update_price(item_code, new_price):
     return True
 
 @frappe.whitelist()
-def create_item(item_code, price, opening_stock=0, warehouse=None):
+def create_item(item_name, price, opening_stock=0, warehouse=None):
     from frappe.utils import flt
     price = flt(price)
     opening_stock = flt(opening_stock)
     
+    # Generate item_code: 189438-XXXX
+    prefix = "189438"
+    last_item = frappe.db.sql("""
+        SELECT name FROM `tabItem` 
+        WHERE name LIKE %s 
+        ORDER BY name DESC LIMIT 1
+    """, (f"{prefix}-%",), as_dict=True)
+    
+    if last_item:
+        last_code = last_item[0].name
+        try:
+            # Extract the last part and increment
+            last_num_str = last_code.split('-')[-1]
+            next_number = int(last_num_str) + 1
+        except (ValueError, IndexError):
+            next_number = 1
+    else:
+        next_number = 1
+        
+    item_code = f"{prefix}-{next_number:04d}"
+
     # Check if Item Group "Products" exists, if not create/find a suitable one
     item_group = "Products"
     if not frappe.db.exists("Item Group", item_group):
@@ -117,7 +138,7 @@ def create_item(item_code, price, opening_stock=0, warehouse=None):
     # 1. Create Item
     doc = frappe.new_doc("Item")
     doc.item_code = item_code
-    doc.item_name = f"Product {item_code}"
+    doc.item_name = item_name
     doc.item_group = item_group
     doc.stock_uom = "Nos"
     doc.is_stock_item = 1
@@ -128,7 +149,10 @@ def create_item(item_code, price, opening_stock=0, warehouse=None):
     update_price(item_code, price)
     
     # 3. Handle Opening Stock
-    if opening_stock > 0 and warehouse:
+    if opening_stock > 0:
+        if not warehouse:
+            warehouse = frappe.db.get_value("Warehouse", {"warehouse_name": "Stores"}, "name") or "Stores - GW"
+            
         stock_entry = frappe.new_doc("Stock Entry")
         stock_entry.stock_entry_type = "Material Receipt"
         stock_entry.company = frappe.db.get_default("company") or frappe.get_all("Company", limit=1)[0].name

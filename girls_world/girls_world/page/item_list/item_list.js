@@ -79,10 +79,11 @@ function render_table(page, items) {
 			<table class="table table-hover table-bordered custom-item-table">
 				<thead class="thead-light">
 					<tr>
-						<th style="width: 20%">Item Code</th>
-						<th style="width: 15%">Price</th>
-						<th style="width: 15%">Available Stock</th>
-						<th style="width: 50%">Actions</th>
+						<th style="width: 15%">Item Code</th>
+						<th style="width: 25%">Item Name</th>
+						<th style="width: 10%">Price</th>
+						<th style="width: 10%">Available Stock</th>
+						<th style="width: 40%">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -94,6 +95,7 @@ function render_table(page, items) {
 		return `
 						<tr>
 							<td class="font-weight-bold text-primary">${item.item_code}</td>
+							<td>${item.item_name || ''}</td>
 							<td class="text-right">${formatted_price}</td>
 							<td class="text-right">
 								<span class="badge ${item.stock > 0 ? 'badge-success' : 'badge-danger'} badge-pill p-2">
@@ -110,6 +112,7 @@ function render_table(page, items) {
 									</button>
 									<button class="btn btn-xs btn-outline-primary btn-barcode" 
 										data-item-code="${item.item_code}" 
+										data-item-name="${item.item_name || ''}"
 										data-price="${clean_price}">
 										<i class="fa fa-barcode mr-1"></i> Barcode
 									</button>
@@ -143,8 +146,9 @@ function render_table(page, items) {
 
 	container.find('.btn-barcode').on('click', function () {
 		const item_code = $(this).attr('data-item-code');
+		const item_name = $(this).attr('data-item-name');
 		const price = $(this).attr('data-price');
-		download_barcode(item_code, price);
+		download_barcode(item_code, item_name, price);
 	});
 
 	container.find('.btn-update-stock').on('click', function () {
@@ -195,32 +199,33 @@ function render_table(page, items) {
 	}
 }
 
-function download_barcode(item_code, price) {
+function download_barcode(item_code, item_name, price) {
 	const logo_url = '/assets/girls_world/images/logo.png';
 	const img = new Image();
 	img.crossOrigin = "Anonymous";
 	img.onload = function () {
-		generate_barcode_with_image(item_code, price, img);
+		generate_barcode_with_image(item_code, item_name, price, img);
 	};
 	img.onerror = function () {
 		// Fallback to text branding if logo is missing
 		console.warn("Logo not found at " + logo_url + ". Using text fallback.");
-		generate_barcode_with_image(item_code, price, null);
+		generate_barcode_with_image(item_code, item_name, price, null);
 	};
 	img.src = logo_url;
 }
 
-function generate_barcode_with_image(item_code, price, logo_img) {
+function generate_barcode_with_image(item_code, item_name, price, logo_img) {
 	// Generate Barcode using JsBarcode on a temporary canvas first to know its dimensions
 	const temp_canvas = document.createElement('canvas');
 	try {
 		JsBarcode(temp_canvas, item_code, {
 			format: "CODE128",
 			width: 2, // Thinner bars for small sticker
-			height: 80, // Balanced height for 25mm total sticker height
+			height: 60, // Reduced height for tighter layout
 			displayValue: true,
 			fontSize: 16,
-			margin: 0
+			margin: 0,
+			textMargin: 0 // Tighter gap between bars and number
 		});
 
 		// Create main canvas with 38:25 ratio (approx 1.52)
@@ -236,37 +241,52 @@ function generate_barcode_with_image(item_code, price, logo_img) {
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 
 		const centerX = canvas.width / 2;
+		const gap = 3; // 2-3px gapping as requested
 
 		if (logo_img) {
-			// Draw Logo - scaled down for small sticker
-			const logo_width = canvas.width * 0.45; // Max 45% of width
+			// Draw Logo
+			const logo_width = canvas.width * 0.45;
 			const logo_height = (logo_img.height / logo_img.width) * logo_width;
-			const logoY = 10;
-			ctx.drawImage(logo_img, (canvas.width - logo_width) / 2, logoY, logo_width, logo_height);
+			let currentY = 5;
+			
+			ctx.drawImage(logo_img, (canvas.width - logo_width) / 2, currentY, logo_width, logo_height);
+			currentY += logo_height + gap;
 
-			// Draw barcode below logo - reduced gap
-			const barcodeY = logoY + logo_height + 10;
-			ctx.drawImage(temp_canvas, (canvas.width - temp_canvas.width) / 2, barcodeY);
+			// Draw barcode below logo
+			ctx.drawImage(temp_canvas, (canvas.width - temp_canvas.width) / 2, currentY);
+			currentY += temp_canvas.height + gap;
 
-			// Add Price text below barcode - tight spacing
+			// Draw Item Name below barcode
 			ctx.fillStyle = 'black';
-			ctx.font = 'bold 18px Inter, "Segoe UI", Roboto, sans-serif';
+			ctx.font = 'bold 16px Inter, "Segoe UI", Roboto, sans-serif';
 			ctx.textAlign = 'center';
-			ctx.fillText(`Price: ${price}`, centerX, barcodeY + temp_canvas.height + 25);
+			ctx.fillText(item_name || '', centerX, currentY + 14);
+			currentY += 14 + gap;
+
+			// Add Price text below name
+			ctx.font = 'bold 18px Inter, "Segoe UI", Roboto, sans-serif';
+			ctx.fillText(`Price: ${price}`, centerX, currentY + 16);
 		} else {
-			// Fallback text branding - smaller and tighter
+			// Fallback text branding
+			let currentY = 10;
 			ctx.fillStyle = 'black';
 			ctx.font = 'bold 22px "Brush Script MT", cursive, sans-serif';
 			ctx.textAlign = 'center';
-			ctx.fillText('Girls World', centerX, 30);
+			ctx.fillText('Girls World', centerX, currentY + 18);
+			currentY += 18 + gap;
 
-			const barcodeY = 45;
-			ctx.drawImage(temp_canvas, (canvas.width - temp_canvas.width) / 2, barcodeY);
+			// Draw barcode
+			ctx.drawImage(temp_canvas, (canvas.width - temp_canvas.width) / 2, currentY);
+			currentY += temp_canvas.height + gap;
 
-			ctx.fillStyle = 'black';
+			// Draw Item Name below barcode
+			ctx.font = 'bold 16px Inter, "Segoe UI", Roboto, sans-serif';
+			ctx.fillText(item_name || '', centerX, currentY + 14);
+			currentY += 14 + gap;
+
+			// Price
 			ctx.font = 'bold 22px Inter, "Segoe UI", Roboto, sans-serif';
-			ctx.textAlign = 'center';
-			ctx.fillText(`Price: ${price}`, centerX, barcodeY + temp_canvas.height + 30);
+			ctx.fillText(`Price: ${price}`, centerX, currentY + 20);
 		}
 
 		// Download the image
@@ -378,6 +398,12 @@ function open_add_item_dialog(page) {
 		title: __('Add New Item'),
 		fields: [
 			{
+				label: __('Item Name'),
+				fieldname: 'item_name',
+				fieldtype: 'Data',
+				reqd: 1
+			},
+			{
 				label: __('Price'),
 				fieldname: 'price',
 				fieldtype: 'Currency',
@@ -387,28 +413,17 @@ function open_add_item_dialog(page) {
 				label: __('Opening Stock'),
 				fieldname: 'opening_stock',
 				fieldtype: 'Float'
-			},
-			{
-				label: __('Warehouse'),
-				fieldname: 'warehouse',
-				fieldtype: 'Link',
-				options: 'Warehouse',
-				depends_on: 'eval:doc.opening_stock > 0'
 			}
 		],
 		primary_action_label: __('Create'),
 		primary_action(values) {
-			// Generate random 13 digit code
-			const item_code = Math.floor(Math.random() * 9000000000000) + 1000000000000;
-			
 			d.disable_primary_action();
 			frappe.call({
 				method: 'girls_world.girls_world.page.item_list.item_list.create_item',
 				args: {
-					item_code: item_code.toString(),
+					item_name: values.item_name,
 					price: values.price,
-					opening_stock: values.opening_stock || 0,
-					warehouse: values.warehouse
+					opening_stock: values.opening_stock || 0
 				},
 				callback: function (r) {
 					if (r.message) {
