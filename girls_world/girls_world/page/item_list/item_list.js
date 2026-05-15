@@ -220,19 +220,16 @@ function generate_barcode_with_image(item_code, item_name, price, logo_img) {
 	try {
 		JsBarcode(temp_canvas, item_code, {
 			format: "CODE128",
-			width: 2, // Thinner bars for small sticker
-			height: 60, // Reduced height for tighter layout
-			displayValue: true,
-			fontSize: 16,
-			margin: 0,
-			textMargin: 0 // Tighter gap between bars and number
+			width: 4, // Extremely wide bars
+			height: 200, // Massive barcode height
+			displayValue: false,
+			margin: 0
 		});
 
-		// Create main canvas with 38:25 ratio (approx 1.52)
+		// Create main canvas with ultra-high resolution (800px wide)
 		const canvas = document.createElement('canvas');
-		const padding_x = 20; // Minimal side padding
-		canvas.width = temp_canvas.width + padding_x;
-		canvas.height = Math.round(canvas.width / 1.52);
+		canvas.width = 800; 
+		canvas.height = Math.round(canvas.width / 1.52); // ~526px
 		
 		const ctx = canvas.getContext('2d');
 
@@ -253,40 +250,52 @@ function generate_barcode_with_image(item_code, item_name, price, logo_img) {
 			currentY += logo_height + gap;
 
 			// Draw barcode below logo
-			ctx.drawImage(temp_canvas, (canvas.width - temp_canvas.width) / 2, currentY);
-			currentY += temp_canvas.height + gap;
+			const barcodeX = (canvas.width - temp_canvas.width) / 2;
+			ctx.drawImage(temp_canvas, barcodeX, currentY);
+			currentY += temp_canvas.height + 5;
 
-			// Draw Item Name below barcode
+			// Draw barcode number MANUALLY 
 			ctx.fillStyle = 'black';
-			ctx.font = 'bold 16px Inter, "Segoe UI", Roboto, sans-serif';
+			ctx.font = 'bold 40px monospace';
 			ctx.textAlign = 'center';
-			ctx.fillText(item_name || '', centerX, currentY + 14);
-			currentY += 14 + gap;
+			ctx.fillText(item_code, centerX, currentY + 35);
+			currentY += 35 + gap;
 
-			// Add Price text below name
-			ctx.font = 'bold 18px Inter, "Segoe UI", Roboto, sans-serif';
-			ctx.fillText(`Price: ${price}`, centerX, currentY + 16);
+			// Draw Item Name
+			ctx.font = 'bold 60px "Segoe UI", Roboto, Arial, sans-serif';
+			ctx.fillText(item_name || '', centerX, currentY + 55);
+			currentY += 55 + gap;
+
+			// Draw Price
+			ctx.font = 'bold 100px "Segoe UI", Roboto, Arial, sans-serif';
+			ctx.fillText(`${price}`, centerX, currentY + 90);
 		} else {
 			// Fallback text branding
-			let currentY = 10;
+			let currentY = 25;
 			ctx.fillStyle = 'black';
-			ctx.font = 'bold 22px "Brush Script MT", cursive, sans-serif';
+			ctx.font = 'bold 80px "Brush Script MT", cursive, sans-serif';
 			ctx.textAlign = 'center';
-			ctx.fillText('Girls World', centerX, currentY + 18);
-			currentY += 18 + gap;
+			ctx.fillText('Girls World', centerX, currentY + 70);
+			currentY += 70 + gap * 2;
 
 			// Draw barcode
-			ctx.drawImage(temp_canvas, (canvas.width - temp_canvas.width) / 2, currentY);
-			currentY += temp_canvas.height + gap;
+			const barcodeX = (canvas.width - temp_canvas.width) / 2;
+			ctx.drawImage(temp_canvas, barcodeX, currentY);
+			currentY += temp_canvas.height + 10;
 
-			// Draw Item Name below barcode
-			ctx.font = 'bold 16px Inter, "Segoe UI", Roboto, sans-serif';
-			ctx.fillText(item_name || '', centerX, currentY + 14);
-			currentY += 14 + gap;
+			// Draw barcode number MANUALLY
+			ctx.font = 'bold 40px monospace';
+			ctx.fillText(item_code, centerX, currentY + 35);
+			currentY += 35 + gap;
+
+			// Draw Item Name
+			ctx.font = 'bold 60px "Segoe UI", Roboto, Arial, sans-serif';
+			ctx.fillText(item_name || '', centerX, currentY + 55);
+			currentY += 55 + gap;
 
 			// Price
-			ctx.font = 'bold 22px Inter, "Segoe UI", Roboto, sans-serif';
-			ctx.fillText(`Price: ${price}`, centerX, currentY + 20);
+			ctx.font = 'bold 105px "Segoe UI", Roboto, Arial, sans-serif';
+			ctx.fillText(`${price}`, centerX, currentY + 95);
 		}
 
 		// Download the image
