@@ -199,22 +199,44 @@ function render_table(page, items) {
 	}
 }
 
-function download_barcode(item_code, item_name, price) {
-	const logo_url = '/assets/girls_world/images/logo.png';
-	const img = new Image();
-	img.crossOrigin = "Anonymous";
-	img.onload = function () {
-		generate_barcode_with_image(item_code, item_name, price, img);
-	};
-	img.onerror = function () {
-		// Fallback to text branding if logo is missing
-		console.warn("Logo not found at " + logo_url + ". Using text fallback.");
-		generate_barcode_with_image(item_code, item_name, price, null);
-	};
-	img.src = logo_url;
+// Cached brand text for barcode fallback, fetched from Company.custom_barcode_company_name
+let barcode_company_name = null;
+
+function get_barcode_company_name(callback) {
+	if (barcode_company_name) {
+		callback(barcode_company_name);
+		return;
+	}
+	const company = frappe.defaults.get_default("company");
+	if (!company) {
+		barcode_company_name = 'Girls World';
+		callback(barcode_company_name);
+		return;
+	}
+	frappe.db.get_value('Company', company, 'custom_barcode_company_name').then((r) => {
+		barcode_company_name = (r.message && r.message.custom_barcode_company_name) || company || 'Girls World';
+		callback(barcode_company_name);
+	});
 }
 
-function generate_barcode_with_image(item_code, item_name, price, logo_img) {
+function download_barcode(item_code, item_name, price) {
+	get_barcode_company_name(function (brand_text) {
+		const logo_url = '/assets/girls_world/images/logo.png';
+		const img = new Image();
+		img.crossOrigin = "Anonymous";
+		img.onload = function () {
+			generate_barcode_with_image(item_code, item_name, price, img, brand_text);
+		};
+		img.onerror = function () {
+			// Fallback to text branding if logo is missing
+			console.warn("Logo not found at " + logo_url + ". Using text fallback.");
+			generate_barcode_with_image(item_code, item_name, price, null, brand_text);
+		};
+		img.src = logo_url;
+	});
+}
+
+function generate_barcode_with_image(item_code, item_name, price, logo_img, brand_text) {
 	// Generate Barcode using JsBarcode on a temporary canvas first to know its dimensions
 	const temp_canvas = document.createElement('canvas');
 	try {
@@ -275,7 +297,7 @@ function generate_barcode_with_image(item_code, item_name, price, logo_img) {
 			ctx.fillStyle = 'black';
 			ctx.font = 'bold 80px "Brush Script MT", cursive, sans-serif';
 			ctx.textAlign = 'center';
-			ctx.fillText('Girls World', centerX, currentY + 70);
+			ctx.fillText(brand_text || 'Girls World', centerX, currentY + 70);
 			currentY += 70 + gap * 2;
 
 			// Draw barcode
