@@ -32,6 +32,11 @@ frappe.pages['item-list'].on_page_load = function (wrapper) {
 		open_add_item_dialog(page);
 	});
 
+	// "Sales Report" button beside Add Item
+	page.add_button(__('Sales Report') + ' (বিক্রয় প্রতিবেদন)', () => {
+		open_sales_report_dialog();
+	}, { icon: 'reports' });
+
 	// Load JsBarcode dynamically
 	frappe.require('https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js', () => {
 		page.set_primary_action('Refresh', () => {
@@ -79,11 +84,12 @@ function render_table(page, items) {
 			<table class="table table-hover table-bordered custom-item-table">
 				<thead class="thead-light">
 					<tr>
-						<th style="width: 15%">Item Code</th>
-						<th style="width: 25%">Item Name</th>
-						<th style="width: 10%">Price</th>
+						<th style="width: 14%">Item Code</th>
+						<th style="width: 22%">Item Name</th>
+						<th style="width: 10%">Buying Price</th>
+						<th style="width: 10%">Selling Price</th>
 						<th style="width: 10%">Available Stock</th>
-						<th style="width: 40%">Actions</th>
+						<th style="width: 34%">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -96,6 +102,7 @@ function render_table(page, items) {
 						<tr>
 							<td class="font-weight-bold text-primary">${item.item_code}</td>
 							<td>${item.item_name || ''}</td>
+							<td class="text-right">${item.buying_price ? frappe.format(item.buying_price, { fieldtype: 'Currency' }) : '<span class="text-muted">—</span>'}</td>
 							<td class="text-right">${formatted_price}</td>
 							<td class="text-right">
 								<span class="badge ${item.stock > 0 ? 'badge-success' : 'badge-danger'} badge-pill p-2">
@@ -122,7 +129,8 @@ function render_table(page, items) {
 									</button>
 									<button class="btn btn-xs btn-outline-success btn-update-price" 
 										data-item-code="${item.item_code}"
-										data-price="${item.price}">
+										data-price="${item.price}"
+										data-buying-price="${item.buying_price || ''}">
 										<i class="fa fa-money mr-1"></i> Update Price
 									</button>
 								</div>
@@ -159,7 +167,8 @@ function render_table(page, items) {
 	container.find('.btn-update-price').on('click', function () {
 		const item_code = $(this).attr('data-item-code');
 		const price = $(this).attr('data-price');
-		open_price_update_dialog(item_code, price, page);
+		const buying_price = $(this).attr('data-buying-price');
+		open_price_update_dialog(item_code, price, buying_price, page);
 	});
 
 	// Add some custom styles
@@ -362,26 +371,34 @@ function open_stock_update_dialog(item_code, page) {
 	d.show();
 }
 
-function open_price_update_dialog(item_code, current_price, page) {
+function open_price_update_dialog(item_code, current_price, current_buying_price, page) {
 	const d = new frappe.ui.Dialog({
-		title: __('Update Price for {0}', [item_code]),
+		title: __('Update Price for {0}', [item_code]) + ' (মূল্য হালনাগাদ)',
 		fields: [
 			{
-				label: __('New Price'),
+				label: __('Buying Price') + ' (ক্রয় মূল্য)',
+				fieldname: 'buying_price',
+				fieldtype: 'Currency',
+				default: current_buying_price || undefined,
+				description: __('Leave blank to keep unchanged')
+			},
+			{
+				label: __('Selling Price') + ' (বিক্রয় মূল্য)',
 				fieldname: 'new_price',
 				fieldtype: 'Currency',
 				default: current_price,
 				reqd: 1
 			}
 		],
-		primary_action_label: __('Update'),
+		primary_action_label: __('Update') + ' (হালনাগাদ করুন)',
 		primary_action(values) {
 			d.disable_primary_action();
 			frappe.call({
 				method: 'girls_world.girls_world.page.item_list.item_list.update_price',
 				args: {
 					item_code: item_code,
-					new_price: values.new_price
+					new_price: values.new_price,
+					buying_price: values.buying_price || ''
 				},
 				callback: function (r) {
 					if (r.message) {
@@ -404,27 +421,33 @@ function open_price_update_dialog(item_code, current_price, page) {
 
 function open_add_item_dialog(page) {
 	const d = new frappe.ui.Dialog({
-		title: __('Add New Item'),
+		title: __('Add New Item') + ' (নতুন পণ্য যোগ করুন)',
 		fields: [
 			{
-				label: __('Item Name'),
+				label: __('Item Name') + ' (পণ্যের নাম)',
 				fieldname: 'item_name',
 				fieldtype: 'Data',
 				reqd: 1
 			},
 			{
-				label: __('Price'),
+				label: __('Buying Price') + ' (ক্রয় মূল্য)',
+				fieldname: 'buying_price',
+				fieldtype: 'Currency',
+				reqd: 1
+			},
+			{
+				label: __('Selling Price') + ' (বিক্রয় মূল্য)',
 				fieldname: 'price',
 				fieldtype: 'Currency',
 				reqd: 1
 			},
 			{
-				label: __('Opening Stock'),
+				label: __('Opening Stock') + ' (প্রারম্ভিক স্টক)',
 				fieldname: 'opening_stock',
 				fieldtype: 'Float'
 			}
 		],
-		primary_action_label: __('Create'),
+		primary_action_label: __('Create') + ' (তৈরি করুন)',
 		primary_action(values) {
 			d.disable_primary_action();
 			frappe.call({
@@ -432,6 +455,7 @@ function open_add_item_dialog(page) {
 				args: {
 					item_name: values.item_name,
 					price: values.price,
+					buying_price: values.buying_price,
 					opening_stock: values.opening_stock || 0
 				},
 				callback: function (r) {
@@ -506,4 +530,127 @@ function open_edit_item_dialog(item_code, item_name, image, page) {
 	});
 
 	d.show();
+}
+
+function open_sales_report_dialog() {
+	const d = new frappe.ui.Dialog({
+		title: __('Sales Report') + ' (বিক্রয় প্রতিবেদন)',
+		size: 'extra-large',
+		fields: [
+			{
+				label: __('Date Range') + ' (তারিখের সীমা)',
+				fieldname: 'date_range',
+				fieldtype: 'DateRange',
+				change() {
+					const range = d.get_value('date_range');
+					if (range && range[0] && range[1]) {
+						load_sales_report(d, range[0], range[1]);
+					}
+				}
+			},
+			{
+				fieldname: 'report_html',
+				fieldtype: 'HTML'
+			}
+		]
+	});
+
+	d.fields_dict.report_html.$wrapper.html(`
+		<div class="text-muted text-center p-5">
+			${__('Select a date range to see sales')} (বিক্রয় দেখতে তারিখের সীমা নির্বাচন করুন)
+		</div>
+	`);
+	d.show();
+}
+
+function load_sales_report(d, from_date, to_date) {
+	const $wrapper = d.fields_dict.report_html.$wrapper;
+	$wrapper.html(`
+		<div class="text-center p-5 text-muted">
+			<div class="spinner-border text-primary" role="status"></div>
+			<p class="mt-3">${__('Loading...')}</p>
+		</div>
+	`);
+
+	frappe.call({
+		method: 'girls_world.girls_world.page.item_list.item_list.get_sales_summary',
+		args: { from_date, to_date },
+		callback(r) {
+			if (r.message) render_sales_report($wrapper, r.message);
+		},
+		error() {
+			$wrapper.html(`<div class="text-danger text-center p-5">${__('Could not load the report')}</div>`);
+		}
+	});
+}
+
+function render_sales_report($wrapper, data) {
+	const cur = (v) => frappe.format(v, { fieldtype: 'Currency' });
+	const num = (v) => frappe.format(v, { fieldtype: 'Float' });
+	const esc = (v) => frappe.utils.escape_html(v || '');
+	const t = data.totals;
+	const profit_color = t.profit < 0 ? 'var(--red-600, #e03636)' : 'var(--green-600, #2f9d58)';
+
+	const card = (label, value, color) => `
+		<div class="sr-card">
+			<div class="sr-card-label">${label}</div>
+			<div class="sr-card-value" ${color ? `style="color:${color}"` : ''}>${value}</div>
+		</div>`;
+
+	const warning = data.missing_buying_price ? `
+		<div class="alert alert-warning mb-3" style="font-size: 13px;">
+			<i class="fa fa-exclamation-triangle mr-1"></i>
+			${__('{0} sold item(s) have no Buying Price, so their cost is not counted and profit is overstated. Set it via Update Price.', [data.missing_buying_price])}
+			<br>(${data.missing_buying_price}টি বিক্রিত পণ্যের ক্রয় মূল্য নেই, তাই লাভ বেশি দেখাচ্ছে।)
+		</div>` : '';
+
+	const rows = data.items.map(it => `
+		<tr>
+			<td class="font-weight-bold text-primary">${esc(it.item_code)}</td>
+			<td>${esc(it.item_name)}</td>
+			<td class="text-right">${num(it.qty)}</td>
+			<td class="text-right">${it.buying_price === null
+				? `<span class="indicator-pill orange" title="${__('No Buying Price')}">${__('Not set')}</span>`
+				: cur(it.buying_price)}</td>
+			<td class="text-right">${cur(it.buying_amount)}</td>
+			<td class="text-right">${cur(it.selling_amount)}</td>
+			<td class="text-right font-weight-bold" style="color:${it.profit < 0 ? 'var(--red-600, #e03636)' : 'inherit'}">${cur(it.profit)}</td>
+		</tr>`).join('');
+
+	$wrapper.html(`
+		<style>
+			.sr-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+			@media (max-width: 768px) { .sr-cards { grid-template-columns: repeat(2, 1fr); } }
+			.sr-card { background: var(--card-bg, #fff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 14px 16px; }
+			.sr-card-label { font-size: 12px; color: var(--text-muted, #64748b); margin-bottom: 6px; }
+			.sr-card-value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+			.sr-table td, .sr-table th { font-variant-numeric: tabular-nums; vertical-align: middle; }
+			.sr-table-wrap { max-height: 55vh; overflow: auto; }
+			.sr-table thead th { position: sticky; top: 0; background: var(--subtle-fg, #f8f9fa); z-index: 1; font-size: 12px; }
+		</style>
+		<div class="sr-cards">
+			${card(__('Quantity Sold') + ' (বিক্রিত পরিমাণ)', num(t.qty))}
+			${card(__('Total Buying Price') + ' (মোট ক্রয় মূল্য)', cur(t.buying_amount))}
+			${card(__('Total Selling Price') + ' (মোট বিক্রয় মূল্য)', cur(t.selling_amount))}
+			${card(__('Total Profit') + ' (মোট লাভ)', cur(t.profit), profit_color)}
+		</div>
+		${warning}
+		${data.items.length ? `
+		<div class="table-responsive sr-table-wrap">
+			<table class="table table-bordered table-hover sr-table mb-0">
+				<thead>
+					<tr>
+						<th>${__('Item Code')}</th>
+						<th>${__('Item Name')}</th>
+						<th class="text-right">${__('Qty Sold')}</th>
+						<th class="text-right">${__('Buying Price')}</th>
+						<th class="text-right">${__('Total Buying')}</th>
+						<th class="text-right">${__('Total Selling')}</th>
+						<th class="text-right">${__('Profit')}</th>
+					</tr>
+				</thead>
+				<tbody>${rows}</tbody>
+			</table>
+		</div>` : `<div class="text-muted text-center p-4">${__('No sales in this period')} (এই সময়ে কোনো বিক্রয় নেই)</div>`}
+	`);
 }
